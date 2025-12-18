@@ -5,11 +5,11 @@ import pandas as pd
 import re
 
 from absl import logging
-from google.cloud.storage import Client
+from google.cloud import storage
 
 
-def load_mcf_file(file: str) -> pd.DataFrame:
-    """ Reads an MCF text file and returns it as a dataframe."""
+def load_mcf_file(file: str):
+    """ Reads an MCF text file and returns mcf nodes."""
     mcf_file = open(file, 'r', encoding='utf-8')
     mcf_contents = mcf_file.read()
     mcf_file.close()
@@ -25,69 +25,95 @@ def load_mcf_file(file: str) -> pd.DataFrame:
             if parsed_line is not None:
                 current_mcf_node[parsed_line.group(1)] = parsed_line.group(2)
         if current_mcf_node:
-            if current_mcf_node['typeOf'] == 'dcid:StatVarObservation':
-                mcf_nodes.append(current_mcf_node)
-            else:
-                logging.warning(
-                    f'Ignoring node of type:{current_mcf_node["typeOf"]}')
-    df = pd.DataFrame(mcf_nodes)
-    return df
+            mcf_nodes.append(current_mcf_node)
+
+    logging.info(f'Loaded {len(mcf_nodes)} nodes from file {file}')
+    return mcf_nodes
 
 
 def load_mcf_files(path: str) -> pd.DataFrame:
     """ Loads all sharded mcf files in the given directory and 
+    returns a combined MCF node list."""
+    node_list = []
+    filenames = glob.glob(path)
+    logging.info(f'Loading {len(filenames)} files from path {path}')
+    for filename in filenames:
+        nodes = load_mcf_file(filename)
+        node_list.extend(nodes)
+    return node_list
+
+
+def load_csv_data(path: str, tmp_dir: str) -> pd.DataFrame:
+    """ Loads all matched files in the given path and 
     returns a single combined dataframe."""
     df_list = []
-    filenames = glob.glob(path)
+    pattern = path
+    if path.startswith('gs://'):
+        pattern = get_gcs_data(path, tmp_dir)
+
+    filenames = glob.glob(pattern)
     for filename in filenames:
-        df = load_mcf_file(filename)
+        df = pd.read_csv(filename)
         df_list.append(df)
     result = pd.concat(df_list, ignore_index=True)
     return result
 
 
-def write_data(df: pd.DataFrame, path: str, file: str):
+def write_csv_data(df: pd.DataFrame, dest: str, file: str, tmp_dir: str):
     """ Writes a dataframe to a CSV file with the given path."""
-    out_file = open(os.path.join(path, file), mode='w', encoding='utf-8')
-    df.to_csv(out_file, index=False, mode='w')
-    out_file.close()
+    if dest.startswith('gs://'):
+        path = os.path.join(tmp_dir, file)
+    else:
+        path = os.path.join(dest, file)
+    with open(path, mode='w', encoding='utf-8') as out_file:
+        df.to_csv(out_file, index=False, mode='w', header=True)
+    if dest.startswith('gs://'):
+        upload_output_data(path, dest)
 
 
-def load_data(path: str, tmp_dir: str) -> pd.DataFrame:
-    """ Loads data from the given path and returns as a dataframe.
-    Args:
-      path: local or gcs path (single file or wildcard format)
-      tmp_dir: destination folder
-    Returns:
-      dataframe with the input data
-    """
-    if path.startswith('gs://'):
-        path = get_gcs_data(path, tmp_dir)
-    return load_mcf_files(path)
+def upload_output_data(src: str, dest: str):
+    client = storage.Client()
+    bucket_name = dest.split('/')[2]
+    bucket = client.get_bucket(bucket_name)
+    for filepath in glob.iglob(src):
+        filename = os.path.basename(filepath)
+        logging.info('Uploading %s to %s', filename, dest)
+        blobname = dest[len('gs://' + bucket_name + '/'):] + '/' + filename
+        blob = bucket.blob(blobname)
+        blob.upload_from_filename(filepath)
 
 
-def get_gcs_data(uri: str, tmp_dir: str) -> str:
+def get_gcs_data(uri: str, dest_dir: str) -> str:
     """ Downloads files from GCS and copies them to local.
     Args:
       uri: single file path or wildcard format 
-      tmp_dir: destination folder
+      dest_dir: destination folder
     Returns:
       path to the output file/folder
     """
-
-    client = Client()
+    client = storage.Client()
     bucket = client.get_bucket(uri.split('/')[2])
-    if '*' in uri:
-        file_pat = uri.split(bucket.name, 1)[1][1:]
-        dirname = os.path.dirname(file_pat)
-        for blob in bucket.list_blobs(prefix=dirname):
-            if fnmatch.fnmatch(blob.name, file_pat):
-                path = os.path.join(tmp_dir, blob.name.replace('/', '_'))
-                blob.download_to_filename(path)
-        return os.path.join(tmp_dir, '*')
-    else:
-        file_name = uri.split('/')[3]
-        blob = bucket.get_blob(file_name)
-        path = os.path.join(tmp_dir, blob.name.replace('/', '_'))
-        blob.download_to_filename(path)
-        return path
+    file_pat = uri.split(bucket.name, 1)[1][1:]
+    dirname = os.path.dirname(file_pat)
+    for blob in bucket.list_blobs(prefix=dirname):
+        if fnmatch.fnmatch(blob.name, file_pat):
+            dest_file = os.path.join(dest_dir, blob.name)
+            os.makedirs(os.path.dirname(dest_file), exist_ok=True)
+            blob.download_to_filename(dest_file)
+    return os.path.join(dest_dir, file_pat)
+
+
+def load_data(path: str, tmp_dir: str) -> list:
+    """ Loads data from the given path and returns dataframe.
+    Args:
+      path: local or gcs path (single file or wildcard format)
+      tmp_dir: temporary folder
+    Returns:
+      combined list of mcf nodes
+    """
+    if path.startswith('gs://'):
+        os.makedirs(tmp_dir, exist_ok=True)
+        path = get_gcs_data(path, tmp_dir)
+
+    mcf_nodes = load_mcf_files(path)
+    return mcf_nodes

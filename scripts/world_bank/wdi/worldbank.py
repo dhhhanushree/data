@@ -161,10 +161,6 @@ RESOLUTION_TO_EXISTING_DCID = {
         'Amount_EconomicActivity_ExpenditureActivity_EducationExpenditure_Government_AsFractionOf_Amount_EconomicActivity_ExpenditureActivity_Government',
     'dcs:WorldBank/SE_XPD_TOTL_GD_ZS':
         'Amount_EconomicActivity_ExpenditureActivity_EducationExpenditure_Government_AsFractionOf_Amount_EconomicActivity_GrossDomesticProduction_Nominal',
-    'dcs:WorldBank/MS_MIL_XPND_CD':
-        'Amount_EconomicActivity_ExpenditureActivity_MilitaryExpenditure_Government',
-    'dcs:WorldBank/MS_MIL_XPND_GD_ZS':
-        'Amount_EconomicActivity_ExpenditureActivity_MilitaryExpenditure_Government_AsFractionOf_Amount_EconomicActivity_GrossDomesticProduction_Nominal',
     'dcs:WorldBank/CM_MKT_LCAP_GD_ZS':
         'Amount_Stock_AsFractionOf_Amount_EconomicActivity_GrossDomesticProduction_Nominal',
     'dcs:WorldBank/CM_MKT_LCAP_CD':
@@ -564,9 +560,10 @@ def process(indicator_codes, worldbank_dataframe, saveOutput=True):
         worldbank_dataframe['Value'] = pd.to_numeric(
             worldbank_dataframe['Value'])
         worldbank_dataframe['ISO3166Alpha3'] = (
-            worldbank_dataframe['ISO3166Alpha3'].apply(
-                lambda code: "dcid:Earth"
-                if code == "WLD" else "dcid:country/" + code))
+            worldbank_dataframe['ISO3166Alpha3'].replace({
+                'XKX': 'XKS'
+            }).apply(lambda code: "dcid:Earth"
+                     if code == "WLD" else "dcid:country/" + code))
         worldbank_dataframe['StatisticalVariable'] = \
             worldbank_dataframe['StatisticalVariable'].apply(
                 lambda code: "dcs:" + code)

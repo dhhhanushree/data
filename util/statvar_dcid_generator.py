@@ -26,6 +26,7 @@ _SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(_SCRIPT_PATH, '.'))  # For soc_codes_names
 
 from soc_codes_names import SOC_MAP
+from naics_codes import NAICS_CODES
 # pylint: enable=wrong-import-position
 # pylint: enable=import-error
 
@@ -78,49 +79,6 @@ _MULTIPLE_VALUE_SEPARATOR_REGEX = re.compile(r'__|&')
 # A mapping of NAICS codes to industry topics
 # This map was generated using the code from the _create_naics_map function at
 # https://github.com/datacommonsorg/tools/blob/master/stat_var_renaming/stat_var_renaming_constants.py
-_NAICS_MAP = {
-    '00': 'Unclassified',
-    '11': 'AgricultureForestryFishingHunting',
-    '21': 'MiningQuarryingOilGasExtraction',
-    '22': 'Utilities',
-    '23': 'Construction',
-    '31': 'Manufacturing',
-    '32': 'Manufacturing',
-    '33': 'Manufacturing',
-    '42': 'WholesaleTrade',
-    '44': 'RetailTrade',
-    '45': 'RetailTrade',
-    '48': 'TransportationWarehousing',
-    '49': 'TransportationWarehousing',
-    '51': 'Information',
-    '52': 'FinanceInsurance',
-    '53': 'RealEstateRentalLeasing',
-    '54': 'ProfessionalScientificTechnicalServices',
-    '55': 'ManagementOfCompaniesEnterprises',
-    '56': 'AdministrativeSupportWasteManagementRemediationServices',
-    '61': 'EducationalServices',
-    '62': 'HealthCareSocialAssistance',
-    '71': 'ArtsEntertainmentRecreation',
-    '72': 'AccommodationFoodServices',
-    '81': 'OtherServices',
-    '92': 'PublicAdministration',
-    '99': 'Nonclassifiable',
-    '10': 'TotalAllIndustries',
-    '101': 'GoodsProducing',
-    '1011': 'NaturalResourcesMining',
-    '1012': 'Construction',
-    '1013': 'Manufacturing',
-    '102': 'ServiceProviding',
-    '1021': 'TradeTransportationUtilities',
-    '1022': 'Information',
-    '1023': 'FinancialActivities',
-    '1024': 'ProfessionalBusinessServices',
-    '1025': 'EducationHealthServices',
-    '1026': 'LeisureHospitality',
-    '1027': 'OtherServices',
-    '1028': 'PublicAdministration',
-    '1029': 'Unclassified',
-}
 
 # Regex to match NAICS Codes. These codes could be a single code or a range
 # Example matches: 53-56, 44
@@ -285,6 +243,15 @@ _PREPEND_APPEND_REPLACE_MAP = {
     'lendingEntity': {
         'prepend': 'Lender',
     },
+    'fromCurrency': {
+        'prepend': 'FromCurrency_',
+    },
+    'toCurrency': {
+        'prepend': 'ToCurrency_',
+    },
+    'internetUsageLocation': {
+        'prepend': 'InternetUsageAt',
+    }
 }
 
 # This is a list of boolean properties
@@ -430,9 +397,9 @@ def _naics_code_to_name(naics_val: str) -> str:
         prev_str = None  # To ensure the same industry is not added twice
         for code in range(lower_limit, upper_limit + 1):
             code_str = str(code)
-            if code_str in _NAICS_MAP and prev_str != _NAICS_MAP[code_str]:
-                industry_str = industry_str + _NAICS_MAP[code_str]
-                prev_str = _NAICS_MAP[code_str]
+            if code_str in NAICS_CODES and prev_str != NAICS_CODES[code_str]:
+                industry_str = industry_str + NAICS_CODES[code_str]
+                prev_str = NAICS_CODES[code_str]
             else:
                 continue
 
@@ -455,7 +422,7 @@ def _naics_code_to_name(naics_val: str) -> str:
             if match_str.find('-') != -1:  # Range
                 industry_str = _process_naics_range(match_str)
             else:
-                industry_str = _NAICS_MAP.get(match_str)
+                industry_str = NAICS_CODES.get(match_str)
                 if not industry_str:
                     return None
             processed_str = processed_str + industry_str
